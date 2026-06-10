@@ -18,8 +18,33 @@ npm test           # unit tests (gear math, solver, snapping, serialization)
 npm run build      # static production build in dist/
 ```
 
-Click **Demo** in the toolbar to load the bundled 3:1 gear-reduction machine,
-then press **Run** (or Space).
+Two machines ship with the app (toolbar buttons):
+
+- **Gears demo** — a motor driving a 3:1 gear reduction.
+- **4-bit adder** — a complete mechanical adder. Select any input dial,
+  toggle its *Value* in the Inspector (A and B are 4 bits each), press
+  **Run**, and read A+B off the drum tower — in binary and decimal.
+
+## The mechanical 4-bit adder
+
+The adder computes the way mechanical analog computers did:
+
+1. Each input bit is an **input dial** — a servo turns it half a revolution
+   for a 1 (green when set, red when clear).
+2. A **differential gearbox** (Σ) per bit column adds the two dials:
+   S_k = A_k + B_k as shaft rotation.
+3. A Horner chain of differentials and 2:1 gear doublings accumulates
+   V = ((2·S₃ + S₂)·2 + S₁)·2 + S₀ = Σ(A_k+B_k)·2^k on one shaft —
+   carries are literally rotations cascading through the gear train.
+4. A 16:1 reduction scales the result to 1/32 turn per unit, and a tower of
+   32-sector **indicator drums** — binary encoder drums, one per output bit
+   plus a decimal drum — displays the sum under a fixed pointer.
+
+Every shaft is a real rigid body: you can inspect any part, retune a dial,
+or pull a gear out of mesh and watch the sum lose that bit. The headless
+integration test (`src/examples/fourBitAdder.test.ts`) builds this exact
+machine in a real physics world and verifies ten different additions land
+within 0.15 of a drum sector.
 
 ## How to build a machine
 
@@ -73,10 +98,14 @@ Key design decisions:
 - **The document is the single source of truth.** The Rapier world is built
   from it on Run and disposed on Reset; the simulation never mutates it.
 - **Hybrid physics.** Everything is real rigid-body simulation (gravity,
-  contacts, joints, springs), except gear meshing, which is a mathematical
-  ratio constraint solved by a custom sequential-impulse solver with
-  anti-drift feedback — stable for long gear trains, yet symmetric (any gear
-  can drive any other) and honest about torque (motors stall at their limit).
+  contacts, joints, springs), except mechanical transmission, which is a set
+  of mathematical constraints solved by a custom sequential-impulse solver
+  with anti-drift feedback: gear meshes (tooth-ratio coupling), summing
+  differentials (θ_out = θ_A + θ_B), torque-limited motors and position
+  servos. Symmetric (any gear can drive any other, differentials back-drive)
+  and honest about torque (motors and servos stall at their limit). Drift
+  correction is grounded in the bodies' actual rotations, so long runs and
+  deep chains stay phase-locked.
 - **Meshing is inferred from geometry**, never stored: position two
   same-module gears rim-to-rim and they couple, move them apart and they
   don't — like real hardware.

@@ -16,6 +16,12 @@ export const springEndpoints = new Map<string, { a: Vec3; b: Vec3 }>();
 
 export const poseVersion = { n: 0 };
 
+// Debug access for development tooling (harmless in production builds).
+declare const window: { __partPoses?: unknown } | undefined;
+if (typeof window !== 'undefined') {
+  window.__partPoses = partPoses;
+}
+
 export function clearPoses(): void {
   partPoses.clear();
   springEndpoints.clear();

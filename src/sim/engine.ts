@@ -3,7 +3,16 @@
  * The document is never mutated by the simulation. */
 
 import RAPIER from '@dimforge/rapier3d-compat';
-import { qRotate, transformDirection, transformPoint, vAdd, vSub } from '@/model/math';
+import {
+  qConjugate,
+  qMultiply,
+  qRotate,
+  transformDirection,
+  transformPoint,
+  vAdd,
+  vDot,
+  vSub,
+} from '@/model/math';
 import type { MachineDocument, Quat, Vec3 } from '@/model/types';
 import { gearDims } from '@/geometry/gearProfile';
 import { num } from '@/parts/partDefinition';
@@ -20,8 +29,10 @@ import {
   maxGearDrift,
   solveCouplings,
   type BodyView,
+  type DifferentialConstraint,
   type GearConstraint,
   type MotorConstraint,
+  type ServoConstraint,
 } from './gearCouplingSolver';
 import { partPoses, poseVersion, springEndpoints } from './syncState';
 
@@ -59,6 +70,21 @@ class RapierBodyView implements BodyView {
   rotateLocal(v: Vec3): Vec3 {
     return qRotate(this.rot, v);
   }
+
+  getRotation(): Quat {
+    return this.rot;
+  }
+}
+
+/** Rotation vector (axis·angle) of the step from quaternion `prev` to `now`. */
+function rotationDelta(prev: Quat, now: Quat): Vec3 {
+  // dq = now ⊗ prev⁻¹ (world-frame delta), short way around.
+  let dq = qMultiply(now, qConjugate(prev));
+  if (dq[3] < 0) dq = [-dq[0], -dq[1], -dq[2], -dq[3]];
+  const s = Math.hypot(dq[0], dq[1], dq[2]);
+  if (s < 1e-12) return [0, 0, 0];
+  const angle = 2 * Math.atan2(s, dq[3]);
+  return [(dq[0] / s) * angle, (dq[1] / s) * angle, (dq[2] / s) * angle];
 }
 
 interface SpringJointPlan {
@@ -77,6 +103,8 @@ export class SimulationEngine {
   private views: RapierBodyView[] = [];
   private gears: GearConstraint[] = [];
   private motors: MotorConstraint[] = [];
+  private differentials: DifferentialConstraint[] = [];
+  private servos: ServoConstraint[] = [];
   private springJoints: SpringJointPlan[] = [];
   private jointCount = 0;
   private disposed = false;
@@ -127,7 +155,9 @@ export class SimulationEngine {
         .setTranslation(...island.origin)
         .setCanSleep(false)
         .setLinearDamping(0.05)
-        .setAngularDamping(0.05);
+        // Bearing friction: keeps long constraint chains (gear trains,
+        // differential adders) critically damped instead of ringing.
+        .setAngularDamping(0.4);
       const body = this.world.createRigidBody(desc);
 
       for (const ip of island.parts) {
@@ -287,16 +317,125 @@ export class SimulationEngine {
         C: 0,
       });
     }
+
+    // --- Differentials: θ_out = θ_inA + θ_inB about the housing axis. ---
+    for (const part of doc.parts) {
+      const def = getPartDef(part.type);
+      if (!def.simTags?.includes('differential')) continue;
+      const housing = viewOfPart(part.id);
+      if (!housing) continue;
+      const axis = transformDirection(part.transform, [0, 1, 0]);
+      const shaft = (anchorId: string): RapierBodyView | null => {
+        for (const c of doc.connections) {
+          for (const [me, other] of [
+            [c.a, c.b],
+            [c.b, c.a],
+          ] as const) {
+            if (me.partId === part.id && me.anchorId === anchorId) {
+              return viewOfPart(other.partId);
+            }
+          }
+        }
+        return null;
+      };
+      const inA = shaft('inA');
+      const inB = shaft('inB');
+      const out = shaft('out');
+      if (!inA || !inB || !out) {
+        this.warnings.push(
+          `Differential ${part.name ?? part.id} has unconnected couplings and is inactive.`,
+        );
+        continue;
+      }
+      this.differentials.push({
+        housing,
+        inA,
+        inB,
+        out,
+        localAxisH: axis,
+        localAxisA: axis,
+        localAxisB: axis,
+        localAxisO: axis,
+        C: 0,
+      });
+    }
+
+    // --- Servos (input dials): drive the dial's island to a set angle. ---
+    for (const part of doc.parts) {
+      const def = getPartDef(part.type);
+      if (!def.simTags?.includes('servo')) continue;
+      const view = viewOfPart(part.id);
+      if (!view) continue;
+      const reversed = part.props.reversed === true;
+      const value = part.props.value === true;
+      this.servos.push({
+        body: view,
+        localAxis: transformDirection(part.transform, [0, 1, 0]),
+        targetAngle: (reversed ? -1 : 1) * (value ? Math.PI : 0),
+        kp: 6,
+        maxVel: num(part.props, 'speed', 5),
+        maxTorque: num(part.props, 'torque', 50000),
+        theta: 0,
+      });
+    }
   }
+
+  private prevRots: Quat[] = [];
 
   step(h: number): void {
     if (this.disposed) return;
     this.world.timestep = h;
     this.world.step();
-    if (this.gears.length > 0 || this.motors.length > 0) {
-      for (const view of this.views) view.refresh();
-      solveCouplings(this.gears, this.motors, h);
+    const n =
+      this.gears.length +
+      this.motors.length +
+      this.differentials.length +
+      this.servos.length;
+    if (n === 0) return;
+
+    for (const view of this.views) view.refresh();
+
+    // Position-level bookkeeping from the bodies' TRUE rotation deltas (see
+    // solver header): gear/diff phase error C and servo angles.
+    if (this.prevRots.length === 0) {
+      this.prevRots = this.views.map((v) => v.getRotation());
     }
+    const deltas = new Map<BodyView, Vec3>();
+    this.views.forEach((view, i) => {
+      deltas.set(view, rotationDelta(this.prevRots[i], view.getRotation()));
+      this.prevRots[i] = view.getRotation();
+    });
+    const dAbout = (view: BodyView, localAxis: Vec3): number =>
+      vDot(deltas.get(view) ?? [0, 0, 0], view.rotateLocal(localAxis));
+
+    for (const g of this.gears) {
+      g.C += g.teethA * dAbout(g.a, g.localAxisA) + g.teethB * dAbout(g.b, g.localAxisB);
+    }
+    for (const d of this.differentials) {
+      d.C +=
+        dAbout(d.out, d.localAxisO) -
+        dAbout(d.inA, d.localAxisA) -
+        dAbout(d.inB, d.localAxisB) +
+        dAbout(d.housing, d.localAxisA) +
+        dAbout(d.housing, d.localAxisB) -
+        dAbout(d.housing, d.localAxisO);
+    }
+    for (const s of this.servos) {
+      s.theta += dAbout(s.body, s.localAxis);
+    }
+
+    // Long differential/gear chains benefit from extra Gauss-Seidel sweeps.
+    const deep = this.differentials.length > 0;
+    solveCouplings(
+      {
+        gears: this.gears,
+        motors: this.motors,
+        differentials: this.differentials,
+        servos: this.servos,
+      },
+      h,
+      deep ? 256 : 8,
+    );
   }
 
   /** Snapshot all part poses into the renderer-facing sync maps. */
@@ -330,9 +469,12 @@ export class SimulationEngine {
     return {
       bodies: this.islands.filter((i) => !i.isStatic).length,
       joints: this.jointCount,
-      couplings: this.gears.length,
-      motors: this.motors.length,
-      maxGearDrift: maxGearDrift(this.gears),
+      couplings: this.gears.length + this.differentials.length,
+      motors: this.motors.length + this.servos.length,
+      maxGearDrift: Math.max(
+        maxGearDrift(this.gears),
+        this.differentials.reduce((m, d) => Math.max(m, Math.abs(d.C)), 0),
+      ),
     };
   }
 

@@ -17,20 +17,35 @@ export function PartMesh({ part }: { part: PartInstance }) {
   const selected = useEditorStore((s) => s.selectedPartId === part.id);
   const placing = useEditorStore((s) => s.placing !== null);
 
-  const material = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: visual.color,
-        metalness: visual.metalness,
-        roughness: visual.roughness,
-      }),
-    [visual.color, visual.metalness, visual.roughness],
+  const sideTexture = def.buildSideTexture?.(part.props) ?? null;
+
+  const material = useMemo(() => {
+    const base = new THREE.MeshStandardMaterial({
+      color: visual.color,
+      metalness: visual.metalness,
+      roughness: visual.roughness,
+    });
+    if (!sideTexture) return base;
+    // Cylinder geometry groups: [side, top cap, bottom cap].
+    const side = new THREE.MeshStandardMaterial({
+      map: sideTexture,
+      metalness: 0.2,
+      roughness: 0.6,
+    });
+    return [side, base, base];
+  }, [visual.color, visual.metalness, visual.roughness, sideTexture]);
+
+  useEffect(
+    () => () => (Array.isArray(material) ? material.forEach((m) => m.dispose()) : material.dispose()),
+    [material],
   );
-  useEffect(() => () => material.dispose(), [material]);
 
   useEffect(() => {
-    material.emissive.set(selected ? '#2a6fc9' : '#000000');
-    material.emissiveIntensity = selected ? 0.35 : 0;
+    const mats = Array.isArray(material) ? material : [material];
+    for (const m of mats) {
+      m.emissive.set(selected ? '#2a6fc9' : '#000000');
+      m.emissiveIntensity = selected ? 0.35 : 0;
+    }
   }, [selected, material]);
 
   useEffect(() => {

@@ -9,15 +9,30 @@ import { disc } from './defs/disc';
 import { hinge } from './defs/hinge';
 import { spring } from './defs/spring';
 import { motor } from './defs/motor';
+import { differential } from './defs/differential';
+import { inputDial } from './defs/inputDial';
+import { indicatorDrum } from './defs/indicatorDrum';
+import { pointerMarker } from './defs/pointerMarker';
 
 let registered = false;
 
 export function registerBuiltinParts(): void {
   if (registered) return;
   registered = true;
-  [baseplate, frameBeam, axle, spurGear, disc, hinge, spring, motor].forEach(
-    registerPart,
-  );
+  [
+    baseplate,
+    frameBeam,
+    axle,
+    spurGear,
+    disc,
+    hinge,
+    spring,
+    motor,
+    differential,
+    inputDial,
+    indicatorDrum,
+    pointerMarker,
+  ].forEach(registerPart);
 }
 
 registerBuiltinParts();

@@ -39,7 +39,7 @@ export function Viewport() {
     <div className="viewport">
       <Canvas
         shadows
-        camera={{ position: [28, 22, 28], fov: 40, near: 0.5, far: 2000 }}
+        camera={{ position: [38, 28, 52], fov: 40, near: 0.5, far: 2000 }}
         onPointerMissed={() => {
           const editor = useEditorStore.getState();
           if (editor.placing) editor.cancelPlacing();
@@ -86,7 +86,7 @@ export function Viewport() {
         <SelectionGizmo />
         <SimulationDriver />
         <PlacementPlane />
-        <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.02} />
+        <OrbitControls makeDefault target={[0, 8, 0]} maxPolarAngle={Math.PI / 2 - 0.02} />
       </Canvas>
     </div>
   );

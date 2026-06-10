@@ -66,7 +66,7 @@ export interface VisualProps {
 
 export type PartProps = Record<string, PropValue>;
 
-export type SimTag = 'gear' | 'motor' | 'spring';
+export type SimTag = 'gear' | 'motor' | 'spring' | 'differential' | 'servo';
 
 export interface PartDefinition {
   type: string;
@@ -84,6 +84,11 @@ export interface PartDefinition {
   simTags?: SimTag[];
   /** Parts that anchor the machine to the world (baseplate) build fixed bodies. */
   isStatic?(props: PartProps): boolean;
+  /**
+   * Optional texture for the side wall of cylindrical parts (indicator drums).
+   * Browser-only — never called by the physics engine or in node tests.
+   */
+  buildSideTexture?(props: PartProps): THREE.Texture;
 }
 
 export const IDENTITY: Transform = { position: [0, 0, 0], rotation: [0, 0, 0, 1] };

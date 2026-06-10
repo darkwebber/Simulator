@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { emptyDocument } from '@/model/types';
 import { gearReductionDemo } from '@/examples/gearReduction';
+import { fourBitAdderDemo } from '@/examples/fourBitAdder';
 import { redo, undo, useDocumentStore } from '@/store/documentStore';
 import { useEditorStore } from '@/store/editorStore';
 import { useSimStore } from '@/store/simStore';
@@ -111,7 +112,18 @@ export function Toolbar() {
               useDocumentStore.getState().setDoc(gearReductionDemo());
             }}
           >
-            Demo
+            Gears demo
+          </button>
+          <button
+            disabled={mode !== 'edit'}
+            title="Load the mechanical 4-bit adder. Set values on the input dials, press Run, read the answer off the drum tower."
+            onClick={() => {
+              sim.reset();
+              useEditorStore.getState().select(null);
+              useDocumentStore.getState().setDoc(fourBitAdderDemo());
+            }}
+          >
+            4-bit adder
           </button>
           <button onClick={() => exportToFile(doc)}>Export</button>
           <button onClick={doImport} disabled={mode !== 'edit'}>
