@@ -97,14 +97,24 @@ that turned out to be missing, in build order:
 (`python -m mnist_mech.evaluate` reprints this inventory for whatever
 weights are loaded.)
 
+## Try it in the browser
+
+**Live demo: <https://darkwebber.github.io/Simulator/>** — draw a digit
+on the punched card (or load MNIST test cards) and watch the pooling
+columns, score rods and falling bar respond. The page is a fully
+client-side port of the same quasi-static simulation (`web/`), verified
+to agree with the Python machine, and is deployed from `main` by
+`.github/workflows/pages.yml`.
+
 ## Usage
 
 ```bash
 pip install numpy
 
-python -m mnist_mech.train      # trains, writes weights/weights.json (~5 min)
-python -m mnist_mech.evaluate   # full test set through the machine
-python -m mnist_mech.demo 7     # watch one card go through, stage by stage
+python -m mnist_mech.train       # trains, writes weights/weights.json (~5 min)
+python -m mnist_mech.evaluate    # full test set through the machine
+python -m mnist_mech.demo 7      # watch one card go through, stage by stage
+python -m mnist_mech.export_web  # regenerate web/weights.js + web/samples.js
 python -m unittest discover tests
 ```
 
