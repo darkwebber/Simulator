@@ -1,0 +1,131 @@
+:root {
+  --bg: #1d1a16;
+  --panel: #2a251f;
+  --brass: #c9a227;
+  --brass-dim: #8a7119;
+  --ink: #e8e0d0;
+  --ink-dim: #9a907c;
+  --hole: #11100d;
+  --accent: #e2543a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+header {
+  padding: 1.2rem 2rem 0.4rem;
+  border-bottom: 2px solid var(--brass-dim);
+}
+
+h1 {
+  margin: 0 0 0.3rem;
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+  color: var(--brass);
+  font-weight: normal;
+}
+
+.subtitle {
+  margin: 0 0 0.8rem;
+  max-width: 70rem;
+  color: var(--ink-dim);
+  font-size: 0.95rem;
+}
+
+.subtitle a { color: var(--brass); }
+
+main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.4rem;
+  padding: 1.4rem 2rem;
+  align-items: flex-start;
+}
+
+.stage {
+  background: var(--panel);
+  border: 1px solid var(--brass-dim);
+  border-radius: 6px;
+  padding: 0.8rem 1rem 1rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.stage h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+  color: var(--brass);
+  font-weight: normal;
+}
+
+.hint {
+  color: var(--ink-dim);
+  font-variant: normal;
+  font-size: 0.8rem;
+  letter-spacing: 0;
+}
+
+canvas {
+  display: block;
+  background: var(--hole);
+  border-radius: 4px;
+  touch-action: none;
+}
+
+#card { cursor: crosshair; }
+
+.controls {
+  margin-top: 0.7rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+button {
+  font-family: inherit;
+  font-size: 0.85rem;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--brass-dim);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+
+button:hover { border-color: var(--brass); }
+
+button.tool.active {
+  background: var(--brass);
+  color: var(--hole);
+  border-color: var(--brass);
+}
+
+#card-label { color: var(--ink-dim); font-size: 0.85rem; }
+
+.verdict {
+  margin-top: 0.7rem;
+  font-size: 1.1rem;
+  color: var(--ink-dim);
+}
+
+#prediction {
+  color: var(--accent);
+  font-size: 1.9rem;
+  font-weight: bold;
+  vertical-align: middle;
+}
+
+footer {
+  padding: 0.8rem 2rem 1.4rem;
+  color: var(--ink-dim);
+  font-size: 0.85rem;
+  border-top: 1px solid #3a342c;
+}

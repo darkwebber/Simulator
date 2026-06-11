@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mechanical MNIST Classifier</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Mechanical MNIST Classifier</h1>
+  <p class="subtitle">
+    A simulated mechanical computer: a punched card is read by 784 feeler
+    pins, pooled by 49 stacking columns, weighed by cords and pulleys
+    (weights &minus;2&hellip;+2), and the falling bar names the tallest
+    score rod. <span id="machine-stats"></span>
+    <a href="https://github.com/darkwebber/Simulator">source</a>
+  </p>
+</header>
+
+<main>
+  <section class="stage" id="stage-card">
+    <h2>1 &middot; punched card <span class="hint">draw with the mouse</span></h2>
+    <canvas id="card" width="336" height="336"></canvas>
+    <div class="controls">
+      <button id="btn-draw" class="tool active">punch</button>
+      <button id="btn-erase" class="tool">plug</button>
+      <button id="btn-clear">blank card</button>
+      <button id="btn-sample">sample card</button>
+      <span id="card-label"></span>
+    </div>
+  </section>
+
+  <section class="stage" id="stage-pool">
+    <h2>2 &middot; pooling columns <span class="hint">follower height = holes in 4&times;4 block</span></h2>
+    <canvas id="pool" width="336" height="336"></canvas>
+  </section>
+
+  <section class="stage" id="stage-rods">
+    <h2>3 &middot; score rods &amp; falling bar</h2>
+    <canvas id="rods" width="420" height="336"></canvas>
+    <div class="verdict">the machine says <span id="prediction">&ndash;</span></div>
+  </section>
+</main>
+
+<footer>
+  Quasi-static simulation of 1,196 moving parts &middot; quantized logistic
+  regressor, weights in {&minus;2,&minus;1,0,1,2} &middot; trained by exact
+  coordinate descent on the integer grid.
+</footer>
+
+<script src="weights.js"></script>
+<script src="samples.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
