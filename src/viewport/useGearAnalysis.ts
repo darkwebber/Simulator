@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useDocumentStore } from '@/store/documentStore';
 import { assembleIslands } from '@/sim/bodyAssembler';
 import { detectGearMeshes, type GearInfo, type NearMiss } from '@/sim/gearMeshDetector';
+import { computeGearPhases } from '@/sim/gearPhase';
 import { gearDims } from '@/geometry/gearProfile';
 import { getPartDef } from '@/parts/registry';
 import { num } from '@/parts/partDefinition';
@@ -11,6 +12,8 @@ export interface GearAnalysis {
   gears: Map<string, GearInfo>;
   /** Gear partIds that will couple when the simulation runs. */
   meshedIds: Set<string>;
+  /** Render-time tooth-phase rotation (rad about local +Y) per meshed gear. */
+  phases: Map<string, number>;
   nearMisses: NearMiss[];
 }
 
@@ -37,7 +40,8 @@ function analyze(doc: MachineDocument): GearAnalysis {
     meshedIds.add(m.aPartId);
     meshedIds.add(m.bPartId);
   }
-  return { gears: new Map(infos.map((g) => [g.partId, g])), meshedIds, nearMisses };
+  const phases = computeGearPhases(infos, meshes);
+  return { gears: new Map(infos.map((g) => [g.partId, g])), meshedIds, phases, nearMisses };
 }
 
 /** Live edit-mode gear-mesh analysis, recomputed when the document changes. */

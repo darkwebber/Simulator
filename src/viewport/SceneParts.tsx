@@ -7,6 +7,7 @@ import { partPoses, springEndpoints } from '@/sim/syncState';
 import { num } from '@/parts/partDefinition';
 import { PartMesh } from './PartMesh';
 import { allMeshes } from './meshRegistry';
+import { useGearAnalysis } from './useGearAnalysis';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const tmpA = new THREE.Vector3();
@@ -16,6 +17,7 @@ const tmpQuat = new THREE.Quaternion();
 
 export function SceneParts() {
   const parts = useDocumentStore((s) => s.doc.parts);
+  const { phases } = useGearAnalysis();
 
   // Every frame: edit mode poses come from the document, run/pause poses from
   // the physics snapshot. (A gizmo drag temporarily owns its object.)
@@ -62,7 +64,7 @@ export function SceneParts() {
   return (
     <>
       {parts.map((part) => (
-        <PartMesh key={part.id} part={part} />
+        <PartMesh key={part.id} part={part} toothPhase={phases.get(part.id) ?? 0} />
       ))}
     </>
   );

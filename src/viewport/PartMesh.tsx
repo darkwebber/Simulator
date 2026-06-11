@@ -10,7 +10,7 @@ import { useSimStore } from '@/store/simStore';
 import { updateGhostFromPoint } from '@/editor/placement';
 import { registerMesh, unregisterMesh } from './meshRegistry';
 
-export function PartMesh({ part }: { part: PartInstance }) {
+export function PartMesh({ part, toothPhase = 0 }: { part: PartInstance; toothPhase?: number }) {
   const groupRef = useRef<THREE.Group>(null);
   const def = getPartDef(part.type);
   const geometry = getGeometry(part.type, part.props);
@@ -101,23 +101,27 @@ export function PartMesh({ part }: { part: PartInstance }) {
 
   return (
     <group ref={groupRef}>
-      <mesh
-        geometry={geometry}
-        material={material}
-        castShadow
-        receiveShadow
-        onClick={onClick}
-        onPointerMove={onPointerMove}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          setHovered(true);
-        }}
-        onPointerOut={() => setHovered(false)}
-      >
-        {accentGeometry && (
-          <mesh geometry={accentGeometry} material={accentMaterial} castShadow receiveShadow />
-        )}
-      </mesh>
+      {/* Tooth-phase: meshed gears are spun about their own axis so teeth
+          interlock visually. The pose group above stays solver/document-owned. */}
+      <group rotation={[0, toothPhase, 0]}>
+        <mesh
+          geometry={geometry}
+          material={material}
+          castShadow
+          receiveShadow
+          onClick={onClick}
+          onPointerMove={onPointerMove}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setHovered(true);
+          }}
+          onPointerOut={() => setHovered(false)}
+        >
+          {accentGeometry && (
+            <mesh geometry={accentGeometry} material={accentMaterial} castShadow receiveShadow />
+          )}
+        </mesh>
+      </group>
     </group>
   );
 }
