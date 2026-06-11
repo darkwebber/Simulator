@@ -39,14 +39,17 @@ export const motor: PartDefinition = {
   },
   buildGeometry() {
     const housing = boxGeometry(3, 3, 3);
-    const coupling = cylinderGeometry(0.7, 1.2, 24);
     const peg = cylinderGeometry(0.35, 1, 16);
+    return merged([{ geometry: housing }, { geometry: peg, position: [0, -1.8, 0] }]);
+  },
+  // Output coupling in brass so the drive end is obvious.
+  buildAccentGeometry() {
     return merged([
-      { geometry: housing },
-      { geometry: coupling, position: [0, 2.1, 0] },
-      { geometry: peg, position: [0, -1.8, 0] },
+      { geometry: cylinderGeometry(0.7, 1.2, 24), position: [0, 2.1, 0] },
+      { geometry: cylinderGeometry(0.5, 0.2, 24), position: [0, 1.6, 0] },
     ]);
   },
+  accentColor: () => '#c9a14f',
   buildColliders() {
     return [
       { shape: 'cuboid', halfExtents: [1.5, 1.5, 1.5], offset: IDENTITY },

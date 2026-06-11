@@ -34,8 +34,18 @@ export interface DetectedMesh {
   teethB: number;
 }
 
+/** Gear pairs positioned almost-but-not-quite to mesh — surfaced live in the
+ * editor so misassembled transmissions are visible before running. */
+export interface NearMiss {
+  aPartId: string;
+  bPartId: string;
+  reason: 'distance' | 'module';
+  message: string;
+}
+
 export interface MeshDetectResult {
   meshes: DetectedMesh[];
+  nearMisses: NearMiss[];
   warnings: string[];
 }
 
@@ -47,6 +57,7 @@ const LOCAL_GEAR_AXIS: Vec3 = [0, 1, 0];
 
 export function detectGearMeshes(gears: GearInfo[]): MeshDetectResult {
   const meshes: DetectedMesh[] = [];
+  const nearMisses: NearMiss[] = [];
   const warnings: string[] = [];
 
   for (let i = 0; i < gears.length; i++) {
@@ -71,17 +82,19 @@ export function detectGearMeshes(gears: GearInfo[]): MeshDetectResult {
 
       if (!overlap || !nearMeshDistance) continue;
       if (Math.abs(A.module - B.module) > 1e-6) {
-        warnings.push(
+        const message =
           `Gears ${A.partId} and ${B.partId} are positioned to mesh but have ` +
-            `different modules (${A.module} vs ${B.module}) — they will not couple.`,
-        );
+          `different modules (${A.module} vs ${B.module}) — they will not couple.`;
+        warnings.push(message);
+        nearMisses.push({ aPartId: A.partId, bPartId: B.partId, reason: 'module', message });
         continue;
       }
       if (!atMeshDistance) {
-        warnings.push(
+        const message =
           `Gears ${A.partId} and ${B.partId} almost mesh (center distance ` +
-            `${radial.toFixed(2)}, ideal ${sum.toFixed(2)}) — nudge them together.`,
-        );
+          `${radial.toFixed(2)}, ideal ${sum.toFixed(2)}) — nudge them together.`;
+        warnings.push(message);
+        nearMisses.push({ aPartId: A.partId, bPartId: B.partId, reason: 'distance', message });
         continue;
       }
       if (A.islandIndex === B.islandIndex) continue; // rigidly joined already
@@ -98,5 +111,5 @@ export function detectGearMeshes(gears: GearInfo[]): MeshDetectResult {
       });
     }
   }
-  return { meshes, warnings };
+  return { meshes, nearMisses, warnings };
 }

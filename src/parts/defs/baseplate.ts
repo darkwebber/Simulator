@@ -1,4 +1,4 @@
-import { boxGeometry } from '@/geometry/primitives';
+import { boxGeometry, cylinderGeometry, merged } from '@/geometry/primitives';
 import type { AnchorDef, PartDefinition } from '../partDefinition';
 import { IDENTITY, num } from '../partDefinition';
 
@@ -60,4 +60,16 @@ export const baseplate: PartDefinition = {
   physical: () => ({ density: 0.0078, friction: 0.8, restitution: 0.1 }),
   visual: () => ({ color: '#3a4750', metalness: 0.3, roughness: 0.75 }),
   isStatic: () => true,
+  // Visible mounting holes at every peg anchor.
+  buildAccentGeometry(props) {
+    const t = num(props, 'thickness', 1);
+    const holes = this.getAnchors(props)
+      .filter((a) => a.kind === 'mount-hole')
+      .map((a) => ({
+        geometry: cylinderGeometry(0.42, 0.14, 12),
+        position: [a.position[0], t / 2 + 0.01, a.position[2]] as [number, number, number],
+      }));
+    return merged(holes);
+  },
+  accentColor: () => '#1b2025',
 };

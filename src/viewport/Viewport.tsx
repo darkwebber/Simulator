@@ -3,6 +3,7 @@ import { ContactShadows, Grid, OrbitControls } from '@react-three/drei';
 import { useEditorStore } from '@/store/editorStore';
 import { useSimStore } from '@/store/simStore';
 import { commitGhost, updateGhostFromPoint } from '@/editor/placement';
+import { EmptyState, HintBar, MechanismIssues } from './Overlays';
 import { SceneParts } from './SceneParts';
 import { GhostPart } from './GhostPart';
 import { AnchorMarkers } from './AnchorMarkers';
@@ -88,6 +89,9 @@ export function Viewport() {
         <PlacementPlane />
         <OrbitControls makeDefault target={[0, 8, 0]} maxPolarAngle={Math.PI / 2 - 0.02} />
       </Canvas>
+      <EmptyState />
+      <HintBar />
+      <MechanismIssues />
     </div>
   );
 }

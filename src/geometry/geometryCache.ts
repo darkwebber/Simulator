@@ -19,6 +19,22 @@ export function getGeometry(type: string, props: PartProps): THREE.BufferGeometr
   return geo;
 }
 
+export function getAccentGeometry(
+  type: string,
+  props: PartProps,
+): THREE.BufferGeometry | null {
+  const def = getPartDef(type);
+  if (!def.buildAccentGeometry) return null;
+  const key = `${cacheKey(type, props)}:accent`;
+  let geo = cache.get(key);
+  if (!geo) {
+    geo = def.buildAccentGeometry(props);
+    cache.set(key, geo);
+    evictIfNeeded();
+  }
+  return geo;
+}
+
 const MAX_ENTRIES = 256;
 
 function evictIfNeeded(): void {

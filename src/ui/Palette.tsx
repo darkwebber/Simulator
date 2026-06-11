@@ -9,6 +9,22 @@ const CATEGORY_LABELS: Record<string, string> = {
   mechanism: 'Mechanisms',
 };
 
+/** Compact glyph per part type — quick visual scanning of the palette. */
+const PART_GLYPHS: Record<string, string> = {
+  baseplate: '▦',
+  frameBeam: '╿',
+  axle: '┃',
+  spurGear: '✱',
+  disc: '●',
+  motor: '◙',
+  inputDial: '◔',
+  hinge: '⌐',
+  spring: '∿',
+  differential: 'Σ',
+  indicatorDrum: '◍',
+  pointerMarker: '▾',
+};
+
 export function Palette() {
   const placingType = useEditorStore((s) => s.placing?.type ?? null);
   const editing = useSimStore((s) => s.mode === 'edit');
@@ -29,16 +45,12 @@ export function Palette() {
                 useEditorStore.getState().startPlacing(def.type, { ...def.defaultProps })
               }
             >
+              <span className="palette-glyph">{PART_GLYPHS[def.type] ?? '◆'}</span>
               {def.label}
             </button>
           ))}
         </section>
       ))}
-      <p className="palette-hint">
-        Click a part, aim in the scene, click to place. Snap points glow.
-        <br />
-        Esc ends placement · Del removes · T/R move/rotate.
-      </p>
     </aside>
   );
 }

@@ -38,19 +38,23 @@ export const hinge: PartDefinition = {
   },
   buildGeometry(props) {
     const h = num(props, 'pinHeight', 2);
-    const pinLen = num(props, 'pinLength', 2.4);
     const base = boxGeometry(2, 0.5, 2);
     const column = boxGeometry(0.8, h, 0.8);
-    const pin = cylinderGeometry(0.35, pinLen, 16);
-    pin.rotateZ(Math.PI / 2); // cylinder Y → X
     const peg = cylinderGeometry(0.35, 1, 16);
     return merged([
       { geometry: base, position: [0, 0.25, 0] },
       { geometry: column, position: [0, h / 2, 0] },
-      { geometry: pin, position: [0, h, 0] },
       { geometry: peg, position: [0, -0.3, 0] },
     ]);
   },
+  // The pivot pin in bright steel — the moving interface.
+  buildAccentGeometry(props) {
+    const h = num(props, 'pinHeight', 2);
+    const pin = cylinderGeometry(0.35, num(props, 'pinLength', 2.4), 16);
+    pin.rotateZ(Math.PI / 2); // cylinder Y → X
+    return merged([{ geometry: pin, position: [0, h, 0] }]);
+  },
+  accentColor: () => '#d5dae0',
   buildColliders(props) {
     const h = num(props, 'pinHeight', 2);
     return [

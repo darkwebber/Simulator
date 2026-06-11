@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { ThreeEvent } from '@react-three/fiber';
+import { useCursor } from '@react-three/drei';
 import type { PartInstance } from '@/model/types';
-import { getGeometry } from '@/geometry/geometryCache';
+import { getAccentGeometry, getGeometry } from '@/geometry/geometryCache';
 import { getPartDef } from '@/parts/registry';
 import { useEditorStore } from '@/store/editorStore';
 import { useSimStore } from '@/store/simStore';
@@ -13,9 +14,14 @@ export function PartMesh({ part }: { part: PartInstance }) {
   const groupRef = useRef<THREE.Group>(null);
   const def = getPartDef(part.type);
   const geometry = getGeometry(part.type, part.props);
+  const accentGeometry = getAccentGeometry(part.type, part.props);
   const visual = def.visual(part.props);
+  const accentColor = def.accentColor?.(part.props) ?? '#20262c';
   const selected = useEditorStore((s) => s.selectedPartId === part.id);
   const placing = useEditorStore((s) => s.placing !== null);
+  const editMode = useSimStore((s) => s.mode === 'edit');
+  const [hovered, setHovered] = useState(false);
+  useCursor(hovered && editMode && !placing);
 
   const sideTexture = def.buildSideTexture?.(part.props) ?? null;
 
@@ -35,18 +41,32 @@ export function PartMesh({ part }: { part: PartInstance }) {
     return [side, base, base];
   }, [visual.color, visual.metalness, visual.roughness, sideTexture]);
 
+  const accentMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: accentColor,
+        metalness: Math.min(visual.metalness + 0.1, 1),
+        roughness: Math.max(visual.roughness - 0.1, 0),
+      }),
+    [accentColor, visual.metalness, visual.roughness],
+  );
+
   useEffect(
-    () => () => (Array.isArray(material) ? material.forEach((m) => m.dispose()) : material.dispose()),
-    [material],
+    () => () => {
+      (Array.isArray(material) ? material : [material]).forEach((m) => m.dispose());
+      accentMaterial.dispose();
+    },
+    [material, accentMaterial],
   );
 
   useEffect(() => {
-    const mats = Array.isArray(material) ? material : [material];
-    for (const m of mats) {
-      m.emissive.set(selected ? '#2a6fc9' : '#000000');
-      m.emissiveIntensity = selected ? 0.35 : 0;
+    const emissive = selected ? '#2a6fc9' : hovered && editMode && !placing ? '#3b4a5c' : '#000000';
+    const intensity = selected ? 0.4 : hovered ? 0.5 : 0;
+    for (const m of [...(Array.isArray(material) ? material : [material]), accentMaterial]) {
+      m.emissive.set(emissive);
+      m.emissiveIntensity = intensity;
     }
-  }, [selected, material]);
+  }, [selected, hovered, editMode, placing, material, accentMaterial]);
 
   useEffect(() => {
     const obj = groupRef.current;
@@ -55,8 +75,7 @@ export function PartMesh({ part }: { part: PartInstance }) {
     return () => unregisterMesh(part.id);
   }, [part.id]);
 
-  // Edit-mode pose comes from the document; in run mode SceneParts overwrites
-  // it every frame from the physics sync map.
+  // Initial pose; per-frame updates come from SceneParts (doc or physics).
   useEffect(() => {
     const obj = groupRef.current;
     if (!obj) return;
@@ -89,7 +108,16 @@ export function PartMesh({ part }: { part: PartInstance }) {
         receiveShadow
         onClick={onClick}
         onPointerMove={onPointerMove}
-      />
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          setHovered(true);
+        }}
+        onPointerOut={() => setHovered(false)}
+      >
+        {accentGeometry && (
+          <mesh geometry={accentGeometry} material={accentMaterial} castShadow receiveShadow />
+        )}
+      </mesh>
     </group>
   );
 }

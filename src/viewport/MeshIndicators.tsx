@@ -1,66 +1,45 @@
-import { useMemo } from 'react';
-import { useDocumentStore } from '@/store/documentStore';
 import { useSimStore } from '@/store/simStore';
-import { assembleIslands } from '@/sim/bodyAssembler';
-import { detectGearMeshes, type GearInfo } from '@/sim/gearMeshDetector';
-import { gearDims } from '@/geometry/gearProfile';
-import { getPartDef } from '@/parts/registry';
-import { num } from '@/parts/partDefinition';
+import { useGearAnalysis } from './useGearAnalysis';
+import type { GearInfo } from '@/sim/gearMeshDetector';
 
-/** Green pitch-circle rings on gears that will couple when the simulation
- * runs — instant feedback that two gears really mesh. */
+function PitchRing({ gear, color }: { gear: GearInfo; color: string }) {
+  return (
+    <group position={gear.transform.position} quaternion={gear.transform.rotation}>
+      {/* Torus axis is local Z; rotate it onto the gear's Y axis. */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} raycast={() => null}>
+        <torusGeometry args={[gear.pitchRadius, 0.05, 8, 64]} />
+        <meshBasicMaterial color={color} transparent opacity={0.85} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Live mechanism feedback while editing: green pitch-circle rings on gears
+ * that will couple, orange rings on near-miss pairs that won't. */
 export function MeshIndicators() {
-  const doc = useDocumentStore((s) => s.doc);
   const mode = useSimStore((s) => s.mode);
-
-  const rings = useMemo(() => {
-    const gears: GearInfo[] = [];
-    const plan = assembleIslands(doc, new Set());
-    for (const part of doc.parts) {
-      if (!getPartDef(part.type).simTags?.includes('gear')) continue;
-      const teeth = Math.round(num(part.props, 'teeth', 16));
-      const module = num(part.props, 'module', 0.5);
-      gears.push({
-        partId: part.id,
-        islandIndex: plan.islandOfPart.get(part.id) ?? -1,
-        transform: part.transform,
-        teeth,
-        module,
-        faceWidth: num(part.props, 'width', 1),
-        pitchRadius: gearDims(teeth, module).rPitch,
-      });
-    }
-    const { meshes } = detectGearMeshes(gears);
-    const byId = new Map(gears.map((g) => [g.partId, g]));
-    const out: Array<{ key: string; gear: GearInfo }> = [];
-    const seen = new Set<string>();
-    for (const m of meshes) {
-      for (const id of [m.aPartId, m.bPartId]) {
-        if (seen.has(id)) continue;
-        seen.add(id);
-        out.push({ key: id, gear: byId.get(id)! });
-      }
-    }
-    return out;
-  }, [doc]);
+  const { gears, meshedIds, nearMisses } = useGearAnalysis();
 
   if (mode !== 'edit') return null;
 
+  const nearMissIds = new Set<string>();
+  for (const nm of nearMisses) {
+    nearMissIds.add(nm.aPartId);
+    nearMissIds.add(nm.bPartId);
+  }
+
   return (
     <>
-      {rings.map(({ key, gear }) => (
-        <group
-          key={key}
-          position={gear.transform.position}
-          quaternion={gear.transform.rotation}
-        >
-          {/* Torus axis is local Z; rotate it onto the gear's Y axis. */}
-          <mesh rotation={[Math.PI / 2, 0, 0]} raycast={() => null}>
-            <torusGeometry args={[gear.pitchRadius, 0.05, 8, 64]} />
-            <meshBasicMaterial color="#39d98a" transparent opacity={0.8} />
-          </mesh>
-        </group>
-      ))}
+      {[...meshedIds].map((id) => {
+        const gear = gears.get(id);
+        return gear ? <PitchRing key={id} gear={gear} color="#39d98a" /> : null;
+      })}
+      {[...nearMissIds]
+        .filter((id) => !meshedIds.has(id))
+        .map((id) => {
+          const gear = gears.get(id);
+          return gear ? <PitchRing key={id} gear={gear} color="#e8a33d" /> : null;
+        })}
     </>
   );
 }

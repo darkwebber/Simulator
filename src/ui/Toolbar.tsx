@@ -1,11 +1,14 @@
 import { useState } from 'react';
+import { useStore } from 'zustand';
 import { emptyDocument } from '@/model/types';
 import { gearReductionDemo } from '@/examples/gearReduction';
 import { fourBitAdderDemo } from '@/examples/fourBitAdder';
-import { redo, undo, useDocumentStore } from '@/store/documentStore';
+import { docTemporal, redo, undo, useDocumentStore } from '@/store/documentStore';
 import { useEditorStore } from '@/store/editorStore';
 import { useSimStore } from '@/store/simStore';
 import { exportToFile, importFromFile } from './persistence';
+
+const MODE_LABEL = { edit: 'Edit', running: 'Running', paused: 'Paused' } as const;
 
 export function Toolbar() {
   const doc = useDocumentStore((s) => s.doc);
@@ -14,17 +17,23 @@ export function Toolbar() {
   const stats = useSimStore((s) => s.stats);
   const warnings = useSimStore((s) => s.warnings);
   const showDebug = useSimStore((s) => s.showDebug);
+  const canUndo = useStore(docTemporal, (s) => s.pastStates.length > 0);
+  const canRedo = useStore(docTemporal, (s) => s.futureStates.length > 0);
   const [importError, setImportError] = useState<string | null>(null);
 
   const sim = useSimStore.getState();
 
-  const newMachine = () => {
-    if (!window.confirm('Start a new machine? Unsaved work is kept in undo history.')) {
-      return;
-    }
+  const loadDoc = (make: () => ReturnType<typeof emptyDocument>) => {
     sim.reset();
     useEditorStore.getState().select(null);
-    useDocumentStore.getState().setDoc(emptyDocument());
+    useDocumentStore.getState().setDoc(make());
+  };
+
+  const newMachine = () => {
+    if (!window.confirm('Start a new machine? You can undo to get the current one back.')) {
+      return;
+    }
+    loadDoc(emptyDocument);
   };
 
   const doImport = async () => {
@@ -42,21 +51,25 @@ export function Toolbar() {
   return (
     <header className="toolbar-wrap">
       <div className="toolbar">
-        <strong className="app-title">⚙ Mechanical Simulator</strong>
-        <input
-          className="machine-name"
-          type="text"
-          value={doc.meta.name}
-          disabled={mode !== 'edit'}
-          onChange={(e) =>
-            useDocumentStore.getState().mutate((d) => ({
-              ...d,
-              meta: { ...d.meta, name: e.target.value },
-            }))
-          }
-        />
+        <span className="toolbar-left">
+          <strong className="app-title">⚙ Mechanical Simulator</strong>
+          <input
+            className="machine-name"
+            type="text"
+            value={doc.meta.name}
+            disabled={mode !== 'edit'}
+            title="Machine name"
+            onChange={(e) =>
+              useDocumentStore.getState().mutate((d) => ({
+                ...d,
+                meta: { ...d.meta, name: e.target.value },
+              }))
+            }
+          />
+        </span>
 
-        <span className="toolbar-group">
+        <span className="toolbar-center">
+          <span className={`mode-chip mode-${mode}`}>{MODE_LABEL[mode]}</span>
           {mode === 'edit' && (
             <button className="primary" onClick={sim.run} title="Build physics and run (Space)">
               ▶ Run
@@ -77,7 +90,7 @@ export function Toolbar() {
               ⏹ Reset
             </button>
           )}
-          <label className="speed">
+          <label className="speed" title="Simulation speed">
             <input
               type="range"
               min={0.1}
@@ -88,45 +101,38 @@ export function Toolbar() {
             />
             {speed.toFixed(1)}×
           </label>
-        </span>
-
-        <span className="toolbar-group">
-          <button onClick={undo} disabled={mode !== 'edit'} title="Undo (Ctrl+Z)">
+          <span className="toolbar-divider" />
+          <button onClick={undo} disabled={mode !== 'edit' || !canUndo} title="Undo (Ctrl+Z)">
             ↩
           </button>
-          <button onClick={redo} disabled={mode !== 'edit'} title="Redo (Ctrl+Shift+Z)">
+          <button onClick={redo} disabled={mode !== 'edit' || !canRedo} title="Redo (Ctrl+Shift+Z)">
             ↪
           </button>
         </span>
 
-        <span className="toolbar-group">
+        <span className="toolbar-right">
           <button onClick={newMachine} disabled={mode !== 'edit'}>
             New
           </button>
           <button
             disabled={mode !== 'edit'}
-            title="Load the bundled 3:1 gear-reduction example"
-            onClick={() => {
-              sim.reset();
-              useEditorStore.getState().select(null);
-              useDocumentStore.getState().setDoc(gearReductionDemo());
-            }}
+            title="Load the 3:1 gear-reduction example"
+            onClick={() => loadDoc(gearReductionDemo)}
           >
             Gears demo
           </button>
           <button
             disabled={mode !== 'edit'}
             title="Load the mechanical 4-bit adder. Set values on the input dials, press Run, read the answer off the drum tower."
-            onClick={() => {
-              sim.reset();
-              useEditorStore.getState().select(null);
-              useDocumentStore.getState().setDoc(fourBitAdderDemo());
-            }}
+            onClick={() => loadDoc(() => fourBitAdderDemo())}
           >
             4-bit adder
           </button>
-          <button onClick={() => exportToFile(doc)}>Export</button>
-          <button onClick={doImport} disabled={mode !== 'edit'}>
+          <span className="toolbar-divider" />
+          <button onClick={() => exportToFile(doc)} title="Download as JSON">
+            Export
+          </button>
+          <button onClick={doImport} disabled={mode !== 'edit'} title="Load a machine JSON">
             Import
           </button>
           <button
@@ -149,9 +155,8 @@ export function Toolbar() {
       )}
       {showDebug && stats && (
         <div className="banner debug">
-          bodies {stats.bodies} · joints {stats.joints} · gear couplings{' '}
-          {stats.couplings} · motors {stats.motors} · max gear drift{' '}
-          {stats.maxGearDrift.toExponential(2)}
+          bodies {stats.bodies} · joints {stats.joints} · couplings {stats.couplings} ·
+          drives {stats.motors} · max drift {stats.maxGearDrift.toExponential(2)}
         </div>
       )}
     </header>

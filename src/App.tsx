@@ -58,7 +58,9 @@ export default function App() {
           break;
         case 'r':
         case 'R':
-          editor.setGizmoMode('rotate');
+          // While placing, R spins the ghost a quarter turn instead.
+          if (editor.placing) editor.rotateGhost();
+          else editor.setGizmoMode('rotate');
           break;
         case ' ':
           e.preventDefault();

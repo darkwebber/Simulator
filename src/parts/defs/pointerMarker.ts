@@ -28,14 +28,18 @@ export const pointerMarker: PartDefinition = {
   buildGeometry(props) {
     const h = num(props, 'height', 18);
     const post = boxGeometry(0.6, h, 0.6);
-    const blade = boxGeometry(0.12, h * 0.6, 1.2);
     const peg = cylinderGeometry(0.35, 1, 16);
     return merged([
       { geometry: post },
-      { geometry: blade, position: [0, h * 0.2, -0.85] },
       { geometry: peg, position: [0, -h / 2 - 0.3, 0] },
     ]);
   },
+  // The reading blade in a signal color.
+  buildAccentGeometry(props) {
+    const h = num(props, 'height', 18);
+    return merged([{ geometry: boxGeometry(0.12, h * 0.6, 1.2), position: [0, h * 0.2, -0.85] }]);
+  },
+  accentColor: () => '#e05c5c',
   buildColliders(props) {
     const h = num(props, 'height', 18);
     return [

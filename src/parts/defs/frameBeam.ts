@@ -73,4 +73,28 @@ export const frameBeam: PartDefinition = {
   },
   physical: () => ({ density: 0.0027, friction: 0.6, restitution: 0.2 }),
   visual: () => ({ color: '#8d99ae', metalness: 0.7, roughness: 0.4 }),
+  // Bearing bosses at every socket so the bearings are visible hardware.
+  buildAccentGeometry(props) {
+    const h = num(props, 'height', 8);
+    const d = num(props, 'depth', 1.6);
+    const pieces: Parameters<typeof merged>[0] = [];
+    for (const a of this.getAnchors(props)) {
+      if (a.kind !== 'axle-socket') continue;
+      if (a.id === 'bearing_top') {
+        pieces.push({
+          geometry: cylinderGeometry(0.62, 0.5, 20),
+          position: [0, h / 2 + 0.1, 0],
+        });
+      } else {
+        // Side bearing: a boss ring on both faces, axis along Z.
+        for (const sign of [1, -1] as const) {
+          const boss = cylinderGeometry(0.6, 0.25, 20);
+          boss.rotateX(Math.PI / 2);
+          pieces.push({ geometry: boss, position: [0, a.position[1], (d / 2) * sign] });
+        }
+      }
+    }
+    return merged(pieces);
+  },
+  accentColor: () => '#525e6b',
 };

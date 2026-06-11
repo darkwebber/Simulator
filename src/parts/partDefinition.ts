@@ -89,6 +89,12 @@ export interface PartDefinition {
    * Browser-only — never called by the physics engine or in node tests.
    */
   buildSideTexture?(props: PartProps): THREE.Texture;
+  /**
+   * Optional second geometry rendered in `accentColor` — mounting holes,
+   * bearing bosses, pointers, emblems. Purely visual; never collides.
+   */
+  buildAccentGeometry?(props: PartProps): THREE.BufferGeometry;
+  accentColor?(props: PartProps): string;
 }
 
 export const IDENTITY: Transform = { position: [0, 0, 0], rotation: [0, 0, 0, 1] };

@@ -66,17 +66,19 @@ export const differential: PartDefinition = {
     const s = num(props, 'spacing', 4);
     const body = boxGeometry(2 * s + 2.4, 3, 3);
     const peg = cylinderGeometry(0.35, 1, 16);
-    const parts: Parameters<typeof merged>[0] = [
-      { geometry: body },
-      { geometry: peg, position: [0, -1.8, 0] },
-    ];
+    return merged([{ geometry: body }, { geometry: peg, position: [0, -1.8, 0] }]);
+  },
+  // Coupling sleeves + emblem plate in brass — the working ends stand out.
+  buildAccentGeometry(props) {
+    const s = num(props, 'spacing', 4);
+    const parts: Parameters<typeof merged>[0] = [];
     for (const x of [-s, 0, s]) {
       parts.push({ geometry: cylinderGeometry(0.7, 1.2, 24), position: [x, 2.1, 0] });
     }
-    // Σ emblem: a small wedge plate on the front face.
     parts.push({ geometry: boxGeometry(1.6, 1.6, 0.15), position: [0, 0, 1.55] });
     return merged(parts);
   },
+  accentColor: () => '#c9a14f',
   buildColliders(props) {
     const s = num(props, 'spacing', 4);
     const out: ReturnType<PartDefinition['buildColliders']> = [

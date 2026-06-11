@@ -34,18 +34,21 @@ export const inputDial: PartDefinition = {
     ];
   },
   buildGeometry() {
+    return cylinderGeometry(1.8, 0.5, 32);
+  },
+  // Pointer arm + knob in a contrasting color so the set angle reads clearly.
+  buildAccentGeometry() {
     const r = 1.8;
-    const disc = cylinderGeometry(r, 0.5, 32);
     const pointer = boxGeometry(r - 0.2, 0.3, 0.5);
     const tip = cylinderGeometry(0.28, 0.32, 4); // diamond tip
     const knob = cylinderGeometry(0.45, 0.5, 16);
     return merged([
-      { geometry: disc },
       { geometry: pointer, position: [(r - 0.2) / 2 + 0.2, 0.4, 0] },
       { geometry: tip, position: [r - 0.15, 0.4, 0] },
       { geometry: knob, position: [0, 0.5, 0] },
     ]);
   },
+  accentColor: () => '#f2ead9',
   buildColliders() {
     return [
       {
