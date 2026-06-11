@@ -99,12 +99,20 @@ weights are loaded.)
 
 ## Try it in the browser
 
-**Live demo: <https://darkwebber.github.io/Simulator/>** — draw a digit
-on the punched card (or load MNIST test cards) and watch the pooling
-columns, score rods and falling bar respond. The page is a fully
-client-side port of the same quasi-static simulation (`web/`), verified
-to agree with the Python machine, and is deployed from `main` by
-`.github/workflows/pages.yml`.
+`web/` is a fully client-side port of the same quasi-static simulation,
+verified to agree with the Python machine: draw a digit on the punched
+card (or load MNIST test cards) and watch the pooling columns, score
+rods and falling bar respond. Run it locally with
+
+```bash
+python -m http.server -d web
+```
+
+`.github/workflows/pages.yml` deploys it to GitHub Pages
+(`https://darkwebber.github.io/Simulator/`) on every push to `main` —
+this needs the repository's *Settings → Pages → Source* set to
+"GitHub Actions" once, by an admin, before the first deploy can
+succeed.
 
 ## Usage
 
