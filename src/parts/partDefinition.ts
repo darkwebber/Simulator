@@ -66,7 +66,7 @@ export interface VisualProps {
 
 export type PartProps = Record<string, PropValue>;
 
-export type SimTag = 'gear' | 'motor' | 'spring' | 'differential' | 'servo';
+export type SimTag = 'gear' | 'motor' | 'spring' | 'differential' | 'servo' | 'cord' | 'scoreRod';
 
 export interface PartDefinition {
   type: string;
@@ -82,6 +82,12 @@ export interface PartDefinition {
   visual(props: PartProps): VisualProps;
   /** Marks behavior the simulation engine must wire up (gear coupling, motor drive…). */
   simTags?: SimTag[];
+  /**
+   * Target angle (rad, about the part's local +Y) for parts tagged 'servo'.
+   * Without it the engine falls back to the input-dial convention
+   * (value=true → half a turn, negated by `reversed`).
+   */
+  servoTarget?(props: PartProps): number;
   /** Parts that anchor the machine to the world (baseplate) build fixed bodies. */
   isStatic?(props: PartProps): boolean;
   /**
@@ -107,4 +113,9 @@ export function num(props: PartProps, key: string, fallback: number): number {
 export function bool(props: PartProps, key: string, fallback: boolean): boolean {
   const v = props[key];
   return typeof v === 'boolean' ? v : fallback;
+}
+
+export function str(props: PartProps, key: string, fallback: string): string {
+  const v = props[key];
+  return typeof v === 'string' ? v : fallback;
 }

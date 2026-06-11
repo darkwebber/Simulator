@@ -29,14 +29,16 @@ import {
   maxGearDrift,
   solveCouplings,
   type BodyView,
+  type CordSumConstraint,
   type DifferentialConstraint,
   type GearConstraint,
+  type LinearBodyView,
   type MotorConstraint,
   type ServoConstraint,
 } from './gearCouplingSolver';
 import { partPoses, poseVersion, springEndpoints } from './syncState';
 
-class RapierBodyView implements BodyView {
+class RapierBodyView implements LinearBodyView {
   private inv = { m11: 0, m12: 0, m13: 0, m22: 0, m23: 0, m33: 0 };
   private rot: Quat = [0, 0, 0, 1];
 
@@ -56,6 +58,20 @@ class RapierBodyView implements BodyView {
 
   setAngvel(v: Vec3): void {
     this.body.setAngvel({ x: v[0], y: v[1], z: v[2] }, true);
+  }
+
+  getLinvel(): Vec3 {
+    const v = this.body.linvel();
+    return [v.x, v.y, v.z];
+  }
+
+  setLinvel(v: Vec3): void {
+    this.body.setLinvel({ x: v[0], y: v[1], z: v[2] }, true);
+  }
+
+  invMass(): number {
+    const m = this.body.mass();
+    return m > 0 ? 1 / m : 0;
   }
 
   invInertiaMul(v: Vec3): Vec3 {
@@ -105,6 +121,7 @@ export class SimulationEngine {
   private motors: MotorConstraint[] = [];
   private differentials: DifferentialConstraint[] = [];
   private servos: ServoConstraint[] = [];
+  private cords: CordSumConstraint[] = [];
   private springJoints: SpringJointPlan[] = [];
   private jointCount = 0;
   private disposed = false;
@@ -143,8 +160,15 @@ export class SimulationEngine {
       [...springEnds.entries()].filter(([, ends]) => ends.size >= 2).map(([id]) => id),
     );
 
+    // --- Cords are pure transmission (and pure visuals): never bodies. ---
+    const cordPartIds = new Set(
+      doc.parts
+        .filter((p) => getPartDef(p.type).simTags?.includes('cord'))
+        .map((p) => p.id),
+    );
+
     // --- Rigid-body islands. ---
-    const plan = assembleIslands(doc, jointSpringIds);
+    const plan = assembleIslands(doc, new Set([...jointSpringIds, ...cordPartIds]));
     this.islands = plan.islands;
 
     for (const island of this.islands) {
@@ -158,6 +182,14 @@ export class SimulationEngine {
         // Bearing friction: keeps long constraint chains (gear trains,
         // differential adders) critically damped instead of ringing.
         .setAngularDamping(0.4);
+      // Score rods hang from their cords against a return spring that carries
+      // the deadweight (main's "rods + return springs"); without it the
+      // Baumgarte equilibrium sags every rod by g·h²/β — a real score error.
+      if (
+        island.parts.some((ip) => getPartDef(ip.part.type).simTags?.includes('scoreRod'))
+      ) {
+        desc.setGravityScale(0);
+      }
       const body = this.world.createRigidBody(desc);
 
       for (const ip of island.parts) {
@@ -360,7 +392,7 @@ export class SimulationEngine {
       });
     }
 
-    // --- Servos (input dials): drive the dial's island to a set angle. ---
+    // --- Servos (input dials, feeler followers): drive to a set angle. ---
     for (const part of doc.parts) {
       const def = getPartDef(part.type);
       if (!def.simTags?.includes('servo')) continue;
@@ -371,16 +403,62 @@ export class SimulationEngine {
       this.servos.push({
         body: view,
         localAxis: transformDirection(part.transform, [0, 1, 0]),
-        targetAngle: (reversed ? -1 : 1) * (value ? Math.PI : 0),
+        targetAngle:
+          def.servoTarget?.(part.props) ?? (reversed ? -1 : 1) * (value ? Math.PI : 0),
         kp: 6,
         maxVel: num(part.props, 'speed', 5),
         maxTorque: num(part.props, 'torque', 50000),
         theta: 0,
       });
     }
+
+    // --- Cord looms: rod travel = feed · Σ weight·θ over its laced cords. ---
+    const partById = new Map(doc.parts.map((p) => [p.id, p]));
+    const cordsOfRod = new Map<string, CordSumConstraint['inputs']>();
+    for (const cordId of cordPartIds) {
+      const cordPart = partById.get(cordId)!;
+      const ends = doc.connections
+        .filter((c) => c.a.partId === cordId || c.b.partId === cordId)
+        .map((c) => (c.a.partId === cordId ? c.b : c.a));
+      const rodEnd = ends.find((e) =>
+        getPartDef(partById.get(e.partId)?.type ?? '').simTags?.includes('scoreRod'),
+      );
+      const srcEnd = ends.find((e) => e !== rodEnd);
+      const weight = num(cordPart.props, 'weight', 1);
+      if (!rodEnd || !srcEnd || weight === 0) {
+        this.warnings.push(
+          `Cord ${cordPart.name ?? cordId} is not laced between a capstan and a ` +
+            `score rod (or has weight 0) and is inactive.`,
+        );
+        continue;
+      }
+      const srcPart = partById.get(srcEnd.partId)!;
+      const srcView = viewOfPart(srcEnd.partId);
+      if (!srcView) continue;
+      const inputs = cordsOfRod.get(rodEnd.partId) ?? [];
+      inputs.push({
+        body: srcView,
+        localAxis: transformDirection(srcPart.transform, [0, 1, 0]),
+        weight,
+      });
+      cordsOfRod.set(rodEnd.partId, inputs);
+    }
+    for (const [rodId, inputs] of cordsOfRod) {
+      const rodPart = partById.get(rodId)!;
+      const rodView = viewOfPart(rodId);
+      if (!rodView) continue;
+      this.cords.push({
+        rod: rodView,
+        localAxisRod: transformDirection(rodPart.transform, [0, 1, 0]),
+        feed: num(rodPart.props, 'feed', 0.075),
+        inputs,
+        C: 0,
+      });
+    }
   }
 
   private prevRots: Quat[] = [];
+  private prevPos: Vec3[] = [];
 
   step(h: number): void {
     if (this.disposed) return;
@@ -390,23 +468,34 @@ export class SimulationEngine {
       this.gears.length +
       this.motors.length +
       this.differentials.length +
-      this.servos.length;
+      this.servos.length +
+      this.cords.length;
     if (n === 0) return;
 
     for (const view of this.views) view.refresh();
 
-    // Position-level bookkeeping from the bodies' TRUE rotation deltas (see
-    // solver header): gear/diff phase error C and servo angles.
+    // Position-level bookkeeping from the bodies' TRUE pose deltas (see
+    // solver header): gear/diff/cord drift C and servo angles.
     if (this.prevRots.length === 0) {
       this.prevRots = this.views.map((v) => v.getRotation());
+      this.prevPos = this.views.map((v) => {
+        const t = v.body.translation();
+        return [t.x, t.y, t.z];
+      });
     }
     const deltas = new Map<BodyView, Vec3>();
+    const linDeltas = new Map<BodyView, Vec3>();
     this.views.forEach((view, i) => {
       deltas.set(view, rotationDelta(this.prevRots[i], view.getRotation()));
       this.prevRots[i] = view.getRotation();
+      const t = view.body.translation();
+      linDeltas.set(view, vSub([t.x, t.y, t.z], this.prevPos[i]));
+      this.prevPos[i] = [t.x, t.y, t.z];
     });
     const dAbout = (view: BodyView, localAxis: Vec3): number =>
       vDot(deltas.get(view) ?? [0, 0, 0], view.rotateLocal(localAxis));
+    const dAlong = (view: BodyView, localAxis: Vec3): number =>
+      vDot(linDeltas.get(view) ?? [0, 0, 0], view.rotateLocal(localAxis));
 
     for (const g of this.gears) {
       g.C += g.teethA * dAbout(g.a, g.localAxisA) + g.teethB * dAbout(g.b, g.localAxisB);
@@ -423,15 +512,23 @@ export class SimulationEngine {
     for (const s of this.servos) {
       s.theta += dAbout(s.body, s.localAxis);
     }
+    for (const c of this.cords) {
+      let dC = dAlong(c.rod, c.localAxisRod);
+      for (const inp of c.inputs) {
+        dC -= c.feed * inp.weight * dAbout(inp.body, inp.localAxis);
+      }
+      c.C += dC;
+    }
 
-    // Long differential/gear chains benefit from extra Gauss-Seidel sweeps.
-    const deep = this.differentials.length > 0;
+    // Long differential/gear chains and cord looms benefit from extra sweeps.
+    const deep = this.differentials.length > 0 || this.cords.length > 0;
     solveCouplings(
       {
         gears: this.gears,
         motors: this.motors,
         differentials: this.differentials,
         servos: this.servos,
+        cords: this.cords,
       },
       h,
       deep ? 256 : 8,
@@ -469,11 +566,12 @@ export class SimulationEngine {
     return {
       bodies: this.islands.filter((i) => !i.isStatic).length,
       joints: this.jointCount,
-      couplings: this.gears.length + this.differentials.length,
+      couplings: this.gears.length + this.differentials.length + this.cords.length,
       motors: this.motors.length + this.servos.length,
       maxGearDrift: Math.max(
         maxGearDrift(this.gears),
         this.differentials.reduce((m, d) => Math.max(m, Math.abs(d.C)), 0),
+        this.cords.reduce((m, c) => Math.max(m, Math.abs(c.C)), 0),
       ),
     };
   }

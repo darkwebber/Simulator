@@ -13,6 +13,11 @@ import { differential } from './defs/differential';
 import { inputDial } from './defs/inputDial';
 import { indicatorDrum } from './defs/indicatorDrum';
 import { pointerMarker } from './defs/pointerMarker';
+import { punchedCard } from './defs/punchedCard';
+import { feelerColumn } from './defs/feelerColumn';
+import { cordCoupler } from './defs/cordCoupler';
+import { scoreRod } from './defs/scoreRod';
+import { fallingBar } from './defs/fallingBar';
 
 let registered = false;
 
@@ -32,6 +37,11 @@ export function registerBuiltinParts(): void {
     inputDial,
     indicatorDrum,
     pointerMarker,
+    punchedCard,
+    feelerColumn,
+    cordCoupler,
+    scoreRod,
+    fallingBar,
   ].forEach(registerPart);
 }
 

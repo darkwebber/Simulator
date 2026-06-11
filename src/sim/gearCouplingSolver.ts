@@ -23,6 +23,13 @@
  * target tracks a position setpoint, impulse clamped to ±τ·h:
  *   Ċ = ω·a − clamp(k_p(θ* − θ), ±v_max) = 0.
  *
+ * Cord loom (score rod laced to many capstans; rod R slides along u, each
+ * input i spins about aᵢ with cord weight wᵢ and drum feed ρ cm/rad):
+ *   Ċ = (v_R·u) − ρ·Σᵢ wᵢ·(ωᵢ·aᵢ) = 0   ⇒  y_R = ρ·Σ wᵢθᵢ + const
+ * — one n-ary row per rod (mechanically a whiffletree of cords and pulleys
+ * condensed into the rod's drum), with the same integrated-drift correction.
+ * The rod body must expose linear velocity (LinearBodyView).
+ *
  * IMPORTANT: the caller owns the position-level state (gear/differential `C`,
  * servo `theta`) and must update it from the bodies' *actual* pose deltas
  * after integration. The solver must not integrate its own velocities:
@@ -42,6 +49,14 @@ export interface BodyView {
   invInertiaMul(v: Vec3): Vec3;
   /** Rotate a body-local direction into world space (current orientation). */
   rotateLocal(v: Vec3): Vec3;
+}
+
+/** Bodies that additionally expose their translational DOF (sliding rods). */
+export interface LinearBodyView extends BodyView {
+  getLinvel(): Vec3;
+  setLinvel(v: Vec3): void;
+  /** Inverse mass (1/kg). Zero for static bodies. */
+  invMass(): number;
 }
 
 export interface GearConstraint {
@@ -90,11 +105,31 @@ export interface ServoConstraint {
   theta: number;
 }
 
+export interface CordInput {
+  body: BodyView;
+  /** Capstan axis in the input body's local frame. */
+  localAxis: Vec3;
+  /** Cord weight (±1, ±2): pulley ratio and which side of the rod it pulls. */
+  weight: number;
+}
+
+export interface CordSumConstraint {
+  rod: LinearBodyView;
+  /** Rod slide direction in the rod body's local frame (unit). */
+  localAxisRod: Vec3;
+  /** Drum feed: cm of rod travel per radian of a weight-1 input. */
+  feed: number;
+  inputs: CordInput[];
+  /** Accumulated constraint drift (mutated by the solver). */
+  C: number;
+}
+
 export interface CouplingSet {
   gears: GearConstraint[];
   motors: MotorConstraint[];
   differentials?: DifferentialConstraint[];
   servos?: ServoConstraint[];
+  cords?: CordSumConstraint[];
 }
 
 const DEFAULT_ITERATIONS = 8;
@@ -147,13 +182,23 @@ interface ServoRow {
   limit: number;
 }
 
+interface CordRow {
+  c: CordSumConstraint;
+  u: Vec3; // rod slide axis, world
+  invMassRod: number;
+  /** Per input: world axis, scaled inverse-inertia jacobian, ρ·w factor. */
+  inputs: Array<{ body: BodyView; axis: Vec3; j: Vec3; k: number }>;
+  mEff: number;
+  bias: number;
+}
+
 export function solveCouplings(
   set: CouplingSet,
   h: number,
   iterations = DEFAULT_ITERATIONS,
   beta = BAUMGARTE,
 ): void {
-  const { gears, motors, differentials = [], servos = [] } = set;
+  const { gears, motors, differentials = [], servos = [], cords = [] } = set;
 
   const gearRows: GearRow[] = [];
   for (const c of gears) {
@@ -247,6 +292,23 @@ export function solveCouplings(
     });
   }
 
+  const cordRows: CordRow[] = [];
+  for (const c of cords) {
+    const u = c.rod.rotateLocal(c.localAxisRod);
+    const invMassRod = c.rod.invMass();
+    const inputs: CordRow['inputs'] = [];
+    let w = invMassRod;
+    for (const inp of c.inputs) {
+      const axis = inp.body.rotateLocal(inp.localAxis);
+      const inv = inp.body.invInertiaMul(axis);
+      const k = c.feed * inp.weight;
+      inputs.push({ body: inp.body, axis, j: inv, k });
+      w += k * k * vDot(axis, inv);
+    }
+    if (w < 1e-12) continue;
+    cordRows.push({ c, u, invMassRod, inputs, mEff: 1 / w, bias: (beta / h) * c.C });
+  }
+
   // Velocity cache: bodies cross the BodyView boundary (a WASM call for
   // Rapier bodies) once before and once after the iterations, not per
   // impulse — hundreds of iterations stay cheap.
@@ -264,6 +326,16 @@ export function solveCouplings(
     w[0] += j[0] * s;
     w[1] += j[1] * s;
     w[2] += j[2] * s;
+  };
+
+  const linCache = new Map<LinearBodyView, Vec3>();
+  const linvel = (b: LinearBodyView): Vec3 => {
+    let v = linCache.get(b);
+    if (!v) {
+      v = b.getLinvel();
+      linCache.set(b, v);
+    }
+    return v;
   };
 
   const diffCdot = (r: DiffRow): number =>
@@ -311,9 +383,22 @@ export function solveCouplings(
       addScaled(r.c.a, r.jA, lambda);
       addScaled(r.c.b, r.jB, lambda);
     }
+
+    for (const r of cordRows) {
+      let cdot = vDot(linvel(r.c.rod), r.u);
+      for (const inp of r.inputs) cdot -= inp.k * vDot(vel(inp.body), inp.axis);
+      const lambda = -r.mEff * (cdot + r.bias);
+      if (lambda === 0) continue;
+      const v = linvel(r.c.rod);
+      v[0] += r.u[0] * r.invMassRod * lambda;
+      v[1] += r.u[1] * r.invMassRod * lambda;
+      v[2] += r.u[2] * r.invMassRod * lambda;
+      for (const inp of r.inputs) addScaled(inp.body, inp.j, -inp.k * lambda);
+    }
   }
 
   for (const [body, w] of cache) body.setAngvel(w);
+  for (const [body, v] of linCache) body.setLinvel(v);
 }
 
 export function maxGearDrift(gears: GearConstraint[]): number {

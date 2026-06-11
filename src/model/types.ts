@@ -21,7 +21,7 @@ export interface PartInstance {
   transform: Transform;
 }
 
-export type ConnectionKind = 'fixed' | 'revolute' | 'prismatic' | 'spring';
+export type ConnectionKind = 'fixed' | 'revolute' | 'prismatic' | 'spring' | 'cord';
 
 export interface AnchorRef {
   partId: string;

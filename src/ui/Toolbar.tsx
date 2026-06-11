@@ -3,6 +3,7 @@ import { useStore } from 'zustand';
 import { emptyDocument } from '@/model/types';
 import { gearReductionDemo } from '@/examples/gearReduction';
 import { fourBitAdderDemo } from '@/examples/fourBitAdder';
+import { mnistClassifierDemo } from '@/examples/mnistClassifier';
 import { docTemporal, redo, undo, useDocumentStore } from '@/store/documentStore';
 import { useEditorStore } from '@/store/editorStore';
 import { useSimStore } from '@/store/simStore';
@@ -127,6 +128,13 @@ export function Toolbar() {
             onClick={() => loadDoc(() => fourBitAdderDemo())}
           >
             4-bit adder
+          </button>
+          <button
+            disabled={mode !== 'edit'}
+            title="Load the mechanical MNIST classifier: feelers read the punched card, cords lace the scores, the falling bar names the digit. Press Run."
+            onClick={() => loadDoc(() => mnistClassifierDemo())}
+          >
+            MNIST classifier
           </button>
           <span className="toolbar-divider" />
           <button onClick={() => exportToFile(doc)} title="Download as JSON">

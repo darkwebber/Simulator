@@ -4,9 +4,11 @@ import { vDot, vScale } from '@/model/math';
 import {
   solveCouplings,
   type BodyView,
+  type CordSumConstraint,
   type CouplingSet,
   type DifferentialConstraint,
   type GearConstraint,
+  type LinearBodyView,
   type MotorConstraint,
   type ServoConstraint,
 } from './gearCouplingSolver';
@@ -27,6 +29,13 @@ function integrate(set: CouplingSet, h: number): void {
   }
   for (const s of set.servos ?? []) {
     s.theta += about(s.body, s.localAxis) * h;
+  }
+  for (const c of set.cords ?? []) {
+    let dC = vDot(c.rod.getLinvel(), c.localAxisRod) * h;
+    for (const inp of c.inputs) {
+      dC -= c.feed * inp.weight * about(inp.body, inp.localAxis) * h;
+    }
+    c.C += dC;
   }
 }
 
@@ -50,6 +59,26 @@ class FakeBody implements BodyView {
   }
   rotateLocal(v: Vec3): Vec3 {
     return v;
+  }
+}
+
+/** Fake body with a translational DOF (a sliding score rod). */
+class FakeLinearBody extends FakeBody implements LinearBodyView {
+  v: Vec3 = [0, 0, 0];
+  constructor(
+    invInertia: number,
+    private inverseMass: number,
+  ) {
+    super(invInertia);
+  }
+  getLinvel(): Vec3 {
+    return this.v;
+  }
+  setLinvel(v: Vec3): void {
+    this.v = v;
+  }
+  invMass(): number {
+    return this.inverseMass;
   }
 }
 
@@ -270,5 +299,90 @@ describe('servo constraint', () => {
     const s = servo(heavy, Math.PI, 50);
     solveCouplings({ gears: [], motors: [], servos: [s] }, H);
     expect(vDot(heavy.w, Y)).toBeCloseTo(1e-6 * 50 * H, 12);
+  });
+});
+
+function cordLoom(
+  rod: LinearBodyView,
+  inputs: Array<{ body: BodyView; weight: number }>,
+  feed = 0.075,
+): CordSumConstraint {
+  return {
+    rod,
+    localAxisRod: Y,
+    feed,
+    inputs: inputs.map(({ body, weight }) => ({ body, localAxis: Y, weight })),
+    C: 0,
+  };
+}
+
+describe('cord-loom constraint', () => {
+  it('rod velocity is the weighted sum of capstan speeds times the feed', () => {
+    const rod = new FakeLinearBody(0, 1);
+    const f1 = new FakeBody(0); // held capstans: immovable about their axes
+    const f2 = new FakeBody(0);
+    const f3 = new FakeBody(0);
+    f1.w = [0, 2, 0];
+    f2.w = [0, 3, 0];
+    f3.w = [0, 1, 0];
+    const c = cordLoom(rod, [
+      { body: f1, weight: 2 },
+      { body: f2, weight: -1 },
+      { body: f3, weight: 1 },
+    ]);
+    solveCouplings({ gears: [], motors: [], cords: [c] }, H);
+    // ẏ = ρ(2·2 − 1·3 + 1·1) = 0.075·2
+    expect(vDot(rod.v, Y)).toBeCloseTo(0.075 * 2, 9);
+  });
+
+  it('back-drives: pushing the rod spins free capstans against their weights', () => {
+    const rod = new FakeLinearBody(0, 1);
+    rod.v = [0, 1, 0];
+    const up = new FakeBody(1);
+    const down = new FakeBody(1);
+    const c = cordLoom(rod, [
+      { body: up, weight: 2 },
+      { body: down, weight: -1 },
+    ]);
+    solveCouplings({ gears: [], motors: [], cords: [c] }, H, 32);
+    // The constraint closes and each capstan turns along its own weight sign.
+    let cdot = vDot(rod.v, Y);
+    cdot -= 0.075 * 2 * vDot(up.w, Y);
+    cdot -= 0.075 * -1 * vDot(down.w, Y);
+    expect(Math.abs(cdot)).toBeLessThan(1e-9);
+    expect(vDot(up.w, Y)).toBeGreaterThan(0);
+    expect(vDot(down.w, Y)).toBeLessThan(0);
+  });
+
+  it('Baumgarte feedback recovers an injected drift', () => {
+    const rod = new FakeLinearBody(0, 1);
+    const capstan = new FakeBody(1);
+    const c = cordLoom(rod, [{ body: capstan, weight: 1 }]);
+    c.C = 0.3;
+    for (let i = 0; i < 400; i++) {
+      solveCouplings({ gears: [], motors: [], cords: [c] }, H);
+      integrate({ gears: [], motors: [], cords: [c] }, H);
+    }
+    expect(Math.abs(c.C)).toBeLessThan(1e-3);
+  });
+
+  it('servo-driven capstans place the rod at the weighted-sum height', () => {
+    const rod = new FakeLinearBody(0, 1);
+    const a = new FakeBody(1);
+    const b = new FakeBody(1);
+    const sa = servo(a, 4); // θa → 4
+    const sb = servo(b, 2); // θb → 2
+    const c = cordLoom(rod, [
+      { body: a, weight: 2 },
+      { body: b, weight: -1 },
+    ]);
+    let y = 0;
+    for (let i = 0; i < 2400; i++) {
+      solveCouplings({ gears: [], motors: [], servos: [sa, sb], cords: [c] }, H, 32);
+      integrate({ gears: [], motors: [], servos: [sa, sb], cords: [c] }, H);
+      y += vDot(rod.v, Y) * H;
+    }
+    // y = ρ(2·4 − 1·2) = 0.075·6
+    expect(y).toBeCloseTo(0.075 * 6, 4);
   });
 });

@@ -18,12 +18,17 @@ npm test           # unit tests (gear math, solver, snapping, serialization)
 npm run build      # static production build in dist/
 ```
 
-Two machines ship with the app (toolbar buttons):
+Three machines ship with the app (toolbar buttons):
 
 - **Gears demo** — a motor driving a 3:1 gear reduction.
 - **4-bit adder** — a complete mechanical adder. Select any input dial,
   toggle its *Value* in the Inspector (A and B are 4 bits each), press
   **Run**, and read A+B off the drum tower — in binary and decimal.
+- **MNIST classifier** — the punched-card digit classifier from the
+  quasi-static simulator on `main`, assembled as a real machine. Press
+  **Run**: 49 feeler columns read the card, 245 weighted cords lace the
+  scores into ten sliding rods, and a falling bar settles on the tallest —
+  the rod it lands on names the digit.
 
 ## The mechanical 4-bit adder
 
@@ -45,6 +50,30 @@ or pull a gear out of mesh and watch the sum lose that bit. The headless
 integration test (`src/examples/fourBitAdder.test.ts`) builds this exact
 machine in a real physics world and verifies ten different additions land
 within 0.15 of a drum sector.
+
+## The mechanical MNIST classifier
+
+The trained model from `main` (quantized logistic regressor, weights in
+{−2…+2}, 87.53% test accuracy) realized in parts:
+
+1. A **punched card** sits in its press frame; a **feeler column** over each
+   4×4 block turns its capstan in proportion to the block's hole count
+   (pooling by stacking, condensed into one part per block).
+2. Every nonzero trained weight is a **weighted cord** from a feeler capstan
+   to a digit's **score rod**: |w| = 1 is a straight lacing, |w| = 2 runs
+   round a 2:1 pulley, the sign is the side it pulls — and a zero weight is
+   a part that doesn't exist (245 of 490 cords are built).
+3. Each score rod slides in a guide; its height *is* the digit's score
+   (bias = rest cord length, set at assembly; a machine-wide lift keeps every
+   rod above its stop for any card). The lacing is solved as one n-ary
+   cord-loom coupling per rod — the differential's constraint generalized to
+   weighted sums, with a linear DOF on the rod.
+4. A **falling bar** slides straight down over the rods and settles on the
+   tallest: argmax by gravity. The rod it rests on names the digit.
+
+`src/examples/mnistClassifier.test.ts` runs sample cards through the real
+physics world and checks every rod against exact integer arithmetic — any
+disagreement is an assembly bug, not noise.
 
 ## How to build a machine
 
